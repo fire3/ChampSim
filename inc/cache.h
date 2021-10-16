@@ -19,6 +19,7 @@
 #define IS_LLC  6
 
 #define IS_PTW 7
+#define IS_L1P  8
 
 // PAGE
 extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
@@ -121,6 +122,7 @@ class CACHE : public MemoryRequestConsumer, public MemoryRequestProducer {
 
     void prefetcher_operate    (uint64_t v_addr, uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type),
          (*l1i_prefetcher_cache_operate)(uint32_t, uint64_t, uint8_t, uint8_t),
+         l1p_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type),
          l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type);
 
     uint32_t l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in),
@@ -128,17 +130,20 @@ class CACHE : public MemoryRequestConsumer, public MemoryRequestProducer {
 
     void (*l1i_prefetcher_cache_fill)(uint32_t, uint64_t, uint32_t, uint32_t, uint8_t, uint64_t);
     void prefetcher_cache_fill(uint64_t v_addr, uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr),
+             l1p_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in),
              l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in);
     uint32_t l2c_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in),
              llc_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in);
 
     void prefetcher_initialize(),
          l1d_prefetcher_initialize(),
+         l1p_prefetcher_initialize(),
          l2c_prefetcher_initialize(),
          llc_prefetcher_initialize();
 
     void prefetcher_final_stats(),
          l1d_prefetcher_final_stats(),
+         l1p_prefetcher_final_stats(),
          l2c_prefetcher_final_stats(),
          llc_prefetcher_final_stats();
 

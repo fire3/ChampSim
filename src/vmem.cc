@@ -43,6 +43,7 @@ uint64_t VirtualMemory::va_to_pa(uint32_t cpu_num, uint64_t vaddr)
     // this vpage doesn't yet have a ppage mapping
     if (fault)
         ppage_free_list.pop_front();
+        
 
     return splice_bits(ppage->second, vaddr, LOG2_PAGE_SIZE);
 }

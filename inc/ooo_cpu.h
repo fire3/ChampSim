@@ -96,9 +96,10 @@ class O3_CPU {
           STLB{"STLB", STLB_SET, STLB_WAY, STLB_WQ_SIZE, STLB_RQ_SIZE, STLB_PQ_SIZE, STLB_MSHR_SIZE, STLB_HIT_LATENCY, STLB_FILL_LATENCY, STLB_MAX_READ, STLB_MAX_WRITE, STLB_PREF_LOAD, false},
           L1I{"L1I", L1I_SET, L1I_WAY, L1I_WQ_SIZE, L1I_RQ_SIZE, L1I_PQ_SIZE, L1I_MSHR_SIZE, L1I_HIT_LATENCY, L1I_FILL_LATENCY, L1I_MAX_READ, L1I_MAX_WRITE, L1I_PREF_LOAD, true},
           L1D{"L1D", L1D_SET, L1D_WAY, L1D_WQ_SIZE, L1D_RQ_SIZE, L1D_PQ_SIZE, L1D_MSHR_SIZE, L1D_HIT_LATENCY, L1D_FILL_LATENCY, L1D_MAX_READ, L1D_MAX_WRITE, L1D_PREF_LOAD, L1D_VA_PREF},
+          L1P{"L1P", L1P_SET, L1P_WAY, L1P_WQ_SIZE, L1P_RQ_SIZE, L1P_PQ_SIZE, L1P_MSHR_SIZE, L1P_HIT_LATENCY, L1P_FILL_LATENCY, L1P_MAX_READ, L1P_MAX_WRITE, L1P_PREF_LOAD, L1P_VA_PREF},
           L2C{"L2C", L2C_SET, L2C_WAY, L2C_WQ_SIZE, L2C_RQ_SIZE, L2C_PQ_SIZE, L2C_MSHR_SIZE, L2C_HIT_LATENCY, L2C_FILL_LATENCY, L2C_MAX_READ, L2C_MAX_WRITE, L2C_PREF_LOAD, L2C_VA_PREF};
 
-    CacheBus ITLB_bus{&ITLB}, DTLB_bus{&DTLB}, L1I_bus{&L1I}, L1D_bus{&L1D};
+    CacheBus ITLB_bus{&ITLB}, DTLB_bus{&DTLB}, L1I_bus{&L1I}, L1D_bus{&L1D}, L1P_bus{&L1P};
   
 	PageTableWalker PTW{"PTW", cpu, PSCL5_SET, PSCL5_WAY, PSCL4_SET, PSCL4_WAY, PSCL3_SET, PSCL3_WAY, PSCL2_SET, PSCL2_WAY, PTW_RQ_SIZE, PTW_MSHR_SIZE, PTW_MAX_READ, PTW_MAX_WRITE, 0};
 
@@ -141,12 +142,20 @@ class O3_CPU {
         L1D.fill_level = FILL_L1;
         L1D.lower_level = &L2C;
 
+        L1P.cpu = this->cpu;
+        L1P.cache_type = IS_L1D;
+        L1P.fill_level = FILL_L1;
+        L1P.lower_level = &L2C;
+
+
+
         L2C.cpu = this->cpu;
         L2C.cache_type = IS_L2C;
         L2C.fill_level = FILL_L2;
 
         l1i_prefetcher_initialize();
         L1D.l1d_prefetcher_initialize();
+        L1P.l1p_prefetcher_initialize();
         L2C.l2c_prefetcher_initialize();
 
         using namespace std::placeholders;
@@ -156,6 +165,7 @@ class O3_CPU {
         STLB.find_victim = std::bind(&CACHE::lru_victim, &STLB, _1, _2, _3, _4, _5, _6, _7);
         L1I.find_victim = std::bind(&CACHE::lru_victim, &L1I, _1, _2, _3, _4, _5, _6, _7);
         L1D.find_victim = std::bind(&CACHE::lru_victim, &L1D, _1, _2, _3, _4, _5, _6, _7);
+        L1P.find_victim = std::bind(&CACHE::lru_victim, &L1P, _1, _2, _3, _4, _5, _6, _7);
         L2C.find_victim = std::bind(&CACHE::lru_victim, &L2C, _1, _2, _3, _4, _5, _6, _7);
 
         ITLB.update_replacement_state = std::bind(&CACHE::lru_update, &ITLB, _2, _3, _7, _8);
@@ -163,6 +173,7 @@ class O3_CPU {
         STLB.update_replacement_state = std::bind(&CACHE::lru_update, &STLB, _2, _3, _7, _8);
         L1I.update_replacement_state = std::bind(&CACHE::lru_update, &L1I, _2, _3, _7, _8);
         L1D.update_replacement_state = std::bind(&CACHE::lru_update, &L1D, _2, _3, _7, _8);
+        L1P.update_replacement_state = std::bind(&CACHE::lru_update, &L1P, _2, _3, _7, _8);
         L2C.update_replacement_state = std::bind(&CACHE::lru_update, &L2C, _2, _3, _7, _8);
 
         ITLB.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &ITLB);
@@ -170,6 +181,7 @@ class O3_CPU {
         STLB.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &STLB);
         L1I.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &L1I);
         L1D.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &L1D);
+        L1P.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &L1P);
         L2C.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &L2C);
    }
 
