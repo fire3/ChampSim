@@ -150,6 +150,7 @@ struct LSQ_ENTRY {
 
     uint8_t translated = 0,
             fetched = 0,
+            permission_checked = 0,
             asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 };
 

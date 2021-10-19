@@ -84,8 +84,10 @@ struct ooo_model_instr {
             fetched = 0,
             decoded = 0,
             scheduled = 0,
+            permission_checked = 0,
             executed = 0;
     int num_reg_ops = 0, num_mem_ops = 0, num_reg_dependent = 0;
+    int num_pcache_ops = 0;
 
     uint8_t destination_registers[NUM_INSTR_DESTINATIONS_SPARC] = {}; // output registers
 
@@ -100,6 +102,7 @@ struct ooo_model_instr {
     uint64_t source_memory[NUM_INSTR_SOURCES] = {}; // input memory
 
     std::array<std::vector<LSQ_ENTRY>::iterator, NUM_INSTR_SOURCES> lq_index = {};
+    std::array<std::vector<LSQ_ENTRY>::iterator, NUM_INSTR_SOURCES> pq_index = {};
     std::array<std::vector<LSQ_ENTRY>::iterator, NUM_INSTR_DESTINATIONS_SPARC> sq_index = {};
 
     ooo_model_instr() = default;

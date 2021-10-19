@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <string.h>
 #include <vector>
+#include <limits.h>
 
 #include "champsim_constants.h"
 #include "dram_controller.h"
@@ -24,6 +25,11 @@ uint8_t warmup_complete[NUM_CPUS], simulation_complete[NUM_CPUS],
 uint64_t warmup_instructions = 1000000, simulation_instructions = 10000000,
 	 champsim_seed;
 
+uint8_t use_pcache = 0;
+uint8_t use_pcache_preload = 0;
+
+uint64_t code_size = 0x800000, heap_size = 0x10000000,
+	 mmap_size = (0x1UL << 30), stack_size = 0x4000000;
 time_t start_time;
 
 extern CACHE LLC;
@@ -288,6 +294,7 @@ void finish_warmup()
 
 		reset_cache_stats(i, &ooo_cpu[i].L1I);
 		reset_cache_stats(i, &ooo_cpu[i].L1D);
+		reset_cache_stats(i, &ooo_cpu[i].L1P);
 		reset_cache_stats(i, &ooo_cpu[i].L2C);
 
 		reset_cache_stats(i, &ooo_cpu[i].ITLB);
@@ -379,6 +386,34 @@ void cpu_l1i_prefetcher_cache_fill(uint32_t cpu_num, uint64_t addr,
 						   evicted_addr);
 }
 
+static unsigned long get_num(const char *str)
+{
+	char *end, c;
+	unsigned long val;
+
+	if (!str)
+		return 0;
+	val = strtoul(str, &end, 0);
+	if (!val || val == ULONG_MAX)
+		return 0;
+	while ((c = *end++) != 0) {
+		switch (c) {
+		case 'k':
+			val <<= 10;
+			break;
+		case 'M':
+			val <<= 20;
+			break;
+		case 'G':
+			val <<= 30;
+			break;
+		default:
+			return 0;
+		}
+	}
+	return val;
+}
+
 int main(int argc, char **argv)
 {
 	// interrupt signal hanlder
@@ -404,8 +439,14 @@ int main(int argc, char **argv)
 			{ "warmup_instructions", required_argument, 0, 'w' },
 			{ "simulation_instructions", required_argument, 0,
 			  'i' },
-			{ "hide_heartbeat", no_argument, 0, 'h' },
-			{ "cloudsuite", no_argument, 0, 'c' },
+			{ "no_heartbeat", no_argument, 0, 'n' },
+			{ "enable_pcache", no_argument, 0, 'p' },
+			{ "enable_pcache_preload", no_argument, 0, 'l' },
+			{ "code", required_argument, 0, 'c' },
+			{ "stack", required_argument, 0, 's' },
+			{ "heap", required_argument, 0, 'h' },
+			{ "mmap", required_argument, 0, 'm' },
+			{ "cloudsuite", no_argument, 0, 'd' },
 			{ "low_bandwidth", no_argument, 0, 'b' },
 			{ "traces", no_argument, 0, 't' },
 			{ 0, 0, 0, 0 }
@@ -413,7 +454,7 @@ int main(int argc, char **argv)
 
 		int option_index = 0;
 
-		c = getopt_long_only(argc, argv, "wihsb", long_options,
+		c = getopt_long_only(argc, argv, "w:i:npldbc:s:h:m:", long_options,
 				     &option_index);
 
 		// no more option characters
@@ -429,10 +470,18 @@ int main(int argc, char **argv)
 		case 'i':
 			simulation_instructions = atol(optarg);
 			break;
-		case 'h':
+		case 'n':
 			show_heartbeat = 0;
 			break;
-		case 'c':
+		case 'p':
+			use_pcache = 1;
+			use_pcache_preload = 0;
+			break;
+		case 'l':
+			use_pcache = 1;
+			use_pcache_preload = 1;
+			break;
+		case 'd':
 			knob_cloudsuite = 1;
 			MAX_INSTR_DESTINATIONS = NUM_INSTR_DESTINATIONS_SPARC;
 			break;
@@ -441,6 +490,18 @@ int main(int argc, char **argv)
 			break;
 		case 't':
 			traces_encountered = 1;
+			break;
+		case 'c':
+			code_size = get_num(optarg);
+			break;
+		case 'h':
+			heap_size = get_num(optarg);
+			break;
+		case 'm':
+			mmap_size = get_num(optarg);
+			break;
+		case 's':
+			stack_size = get_num(optarg);
 			break;
 		default:
 			abort();
@@ -457,6 +518,15 @@ int main(int argc, char **argv)
 	cout << "Number of CPUs: " << NUM_CPUS << endl;
 	cout << "LLC sets: " << LLC_SET << endl;
 	cout << "LLC ways: " << LLC_WAY << endl;
+
+        if (use_pcache) {
+                printf("Pcache enabled.\n");
+		printf("Code size: %#lx\n", code_size);
+		printf("Heap size: %#lx\n", heap_size);
+		printf("Mmap size: %#lx\n", mmap_size);
+		printf("Stack size: %#lx\n", stack_size);
+                vmem.setup_pcache();
+	}
 
 	if (knob_low_bandwidth)
 		DRAM_MTPS = DRAM_IO_FREQ / 4;
@@ -720,6 +790,7 @@ int main(int argc, char **argv)
 
 				record_roi_stats(i, &ooo_cpu[i].L1D);
 				record_roi_stats(i, &ooo_cpu[i].L1I);
+				record_roi_stats(i, &ooo_cpu[i].L1P);
 				record_roi_stats(i, &ooo_cpu[i].L2C);
 				record_roi_stats(i, &LLC);
 
@@ -787,6 +858,7 @@ int main(int argc, char **argv)
 #ifndef CRC2_COMPILE
 		print_roi_stats(i, &ooo_cpu[i].L1D);
 		print_roi_stats(i, &ooo_cpu[i].L1I);
+		print_roi_stats(i, &ooo_cpu[i].L1P);
 		print_roi_stats(i, &ooo_cpu[i].L2C);
 
 		print_roi_stats(i, &ooo_cpu[i].ITLB);
