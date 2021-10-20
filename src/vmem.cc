@@ -134,6 +134,7 @@ uint64_t VirtualMemory::va_to_pa(uint32_t cpu_num, uint64_t vaddr)
 	if (fault)
 		ppage_free_list.pop_front();
 
+	//printf("VA: %#lx\n",vaddr);
 	return splice_bits(ppage->second, vaddr, LOG2_PAGE_SIZE);
 }
 
