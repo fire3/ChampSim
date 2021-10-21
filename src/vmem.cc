@@ -10,6 +10,7 @@
 #include "util.h"
 
 extern uint8_t use_pcache;
+extern uint8_t use_direct_segment;
 
 extern uint64_t code_size, heap_size, mmap_size, stack_size;
 
@@ -53,7 +54,7 @@ uint64_t VirtualMemory::pa_to_ptable_pa(uint64_t paddr)
 
 void VirtualMemory::setup_pcache()
 {
-	if (use_pcache) {
+	if (use_pcache || use_direct_segment) {
                 ptable_start = 0x2000;
                 ptable_size = pmem_size / PAGE_SIZE;
 

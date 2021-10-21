@@ -6,6 +6,7 @@
 extern VirtualMemory vmem;
 extern uint64_t current_core_cycle[NUM_CPUS];
 extern uint8_t warmup_complete[NUM_CPUS];
+extern uint8_t use_pcache;
 
 PageTableWalker::PageTableWalker(string v1, uint32_t cpu, uint32_t v2,
 				 uint32_t v3, uint32_t v4, uint32_t v5,
@@ -140,9 +141,17 @@ void PageTableWalker::handle_fill()
 			}
 
 			//Return the translated physical address to STLB. Does not contain last 12 bits
-			fill_mshr->data =
-				vmem.va_to_pa(cpu, fill_mshr->full_v_addr) >>
-				LOG2_PAGE_SIZE;
+			if (use_pcache)
+				fill_mshr->data =
+					vmem.pcache_va_to_pa(cpu,
+						      fill_mshr->full_v_addr) >>
+					LOG2_PAGE_SIZE;
+			else
+				fill_mshr->data =
+					vmem.va_to_pa(cpu,
+						      fill_mshr->full_v_addr) >>
+					LOG2_PAGE_SIZE;
+
 			fill_mshr->full_addr = fill_mshr->full_v_addr;
 			fill_mshr->address =
 				fill_mshr->full_addr >> LOG2_PAGE_SIZE;

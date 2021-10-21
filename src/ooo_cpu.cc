@@ -16,6 +16,7 @@ extern uint8_t MAX_INSTR_DESTINATIONS;
 extern VirtualMemory vmem;
 
 extern uint8_t use_pcache;
+extern uint8_t use_direct_segment;
 extern uint8_t use_pcache_preload;
 
 void O3_CPU::initialize_core()
@@ -324,10 +325,14 @@ void O3_CPU::translate_fetch()
 			     });
 	if (itlb_req_end != IFETCH_BUFFER.end() ||
 	    itlb_req_begin == IFETCH_BUFFER.begin()) {
+		do_translate_fetch(itlb_req_begin, itlb_req_end);
+
+#if 0
 		if (!use_pcache)
 			do_translate_fetch(itlb_req_begin, itlb_req_end);
 		else
 			do_translate_fetch_pcache(itlb_req_begin, itlb_req_end);
+#endif
 	}
 }
 
@@ -573,8 +578,14 @@ int O3_CPU::prefetch_code_line(uint64_t pf_v_addr)
 
 	if (!L1I.PQ.full()) {
 		// magically translate prefetches
-		uint64_t pf_pa = splice_bits(vmem.va_to_pa(cpu, pf_v_addr),
-					     pf_v_addr, LOG2_PAGE_SIZE);
+		uint64_t pf_pa;
+		if (use_pcache)
+			pf_pa = splice_bits(vmem.pcache_va_to_pa(cpu,
+								 pf_v_addr),
+					    pf_v_addr, LOG2_PAGE_SIZE);
+		else
+			pf_pa = splice_bits(vmem.va_to_pa(cpu, pf_v_addr),
+					    pf_v_addr, LOG2_PAGE_SIZE);
 
 		PACKET pf_packet;
 		pf_packet.fill_level = FILL_L1;
@@ -920,7 +931,15 @@ void O3_CPU::add_load_queue(
 			do_sq_forward_to_lq(*sq_it, *lq_it);
 	} else {
 		// If this entry is not waiting on RAW
-		RTL0.push(lq_it);
+
+		if (!use_direct_segment)
+			RTL0.push(lq_it);
+		else {
+			lq_it->physical_address = vmem.pcache_va_to_pa(
+				cpu, lq_it->virtual_address);
+			lq_it->translated = COMPLETED;
+			RTL1.push(lq_it);
+		}
 	}
 }
 
@@ -950,7 +969,14 @@ void O3_CPU::add_store_queue(
 	if (STA_head == STA_SIZE)
 		STA_head = 0;
 
-	RTS0.push(sq_it);
+	if (!use_direct_segment)
+		RTS0.push(sq_it);
+	else {
+		sq_it->physical_address =
+			vmem.pcache_va_to_pa(cpu, sq_it->virtual_address);
+		sq_it->translated = COMPLETED;
+		RTS1.push(sq_it);
+	}
 
 	DP(if (warmup_complete[cpu]) {
 		cout << "[SQ] " << __func__
@@ -1012,7 +1038,9 @@ void O3_CPU::operate_lsq()
 
 		if (rq_index == -2)
 			break;
+
 		if (use_pcache_preload) {
+			// push to RTL1 simultaneously
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
 			RTL1.push(RTL0.front());
@@ -1491,7 +1519,6 @@ void O3_CPU::handle_memory_return()
 				}
 			}
 		}
-
 
 		while (!l1p_entry.sq_index_depend_on_me.empty()) {
 			auto sq_merged =

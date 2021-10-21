@@ -27,6 +27,8 @@ uint64_t warmup_instructions = 1000000, simulation_instructions = 10000000,
 
 uint8_t use_pcache = 0;
 uint8_t use_pcache_preload = 0;
+uint8_t use_direct_segment = 0;
+uint8_t use_rmm = 0;
 
 uint64_t code_size = 0x800000, heap_size = 0x10000000,
 	 mmap_size = (0x1UL << 30), stack_size = 0x4000000;
@@ -440,8 +442,8 @@ int main(int argc, char **argv)
 			{ "simulation_instructions", required_argument, 0,
 			  'i' },
 			{ "no_heartbeat", no_argument, 0, 'n' },
-			{ "enable_pcache", no_argument, 0, 'p' },
-			{ "enable_pcache_preload", no_argument, 0, 'l' },
+			{ "pcache", no_argument, 0, 'p' },
+			{ "pcache_preload", no_argument, 0, 'l' },
 			{ "code", required_argument, 0, 'c' },
 			{ "stack", required_argument, 0, 's' },
 			{ "heap", required_argument, 0, 'h' },
@@ -449,6 +451,8 @@ int main(int argc, char **argv)
 			{ "cloudsuite", no_argument, 0, 'd' },
 			{ "low_bandwidth", no_argument, 0, 'b' },
 			{ "traces", no_argument, 0, 't' },
+			{ "direct_segment", no_argument, 0, 1},
+			{ "rmm", no_argument, 0, 2},
 			{ 0, 0, 0, 0 }
 		};
 
@@ -464,6 +468,9 @@ int main(int argc, char **argv)
 		int traces_encountered = 0;
 
 		switch (c) {
+		case 1:
+			use_direct_segment = 1;
+			break;
 		case 'w':
 			warmup_instructions = atol(optarg);
 			break;
@@ -519,14 +526,25 @@ int main(int argc, char **argv)
 	cout << "LLC sets: " << LLC_SET << endl;
 	cout << "LLC ways: " << LLC_WAY << endl;
 
-        if (use_pcache) {
-                printf("Pcache enabled.\n");
+        if (use_pcache || use_direct_segment) {
+		if (code_size == 0 || heap_size == 0 || mmap_size == 0 || stack_size == 0) {
+			printf("Please indicate the correct code/heap/mmap/stack size.\n");
+			exit(1);
+		}
 		printf("Code size: %#lx\n", code_size);
 		printf("Heap size: %#lx\n", heap_size);
 		printf("Mmap size: %#lx\n", mmap_size);
 		printf("Stack size: %#lx\n", stack_size);
                 vmem.setup_pcache();
 	}
+
+	if (use_pcache)
+		printf("Pcache enabled.\n");
+	if (use_pcache_preload)
+		printf("Pcache preload enabled.\n");
+
+	if (use_direct_segment)
+		printf("Direct segment enabled.\n");
 
 	if (knob_low_bandwidth)
 		DRAM_MTPS = DRAM_IO_FREQ / 4;
@@ -849,12 +867,6 @@ int main(int argc, char **argv)
 
 	cout << endl << "Region of Interest Statistics" << endl;
 	for (uint32_t i = 0; i < NUM_CPUS; i++) {
-		cout << endl
-		     << "CPU " << i << " cumulative IPC: "
-		     << ((float)ooo_cpu[i].finish_sim_instr /
-			 ooo_cpu[i].finish_sim_cycle);
-		cout << " instructions: " << ooo_cpu[i].finish_sim_instr
-		     << " cycles: " << ooo_cpu[i].finish_sim_cycle << endl;
 #ifndef CRC2_COMPILE
 		print_roi_stats(i, &ooo_cpu[i].L1D);
 		print_roi_stats(i, &ooo_cpu[i].L1I);
@@ -867,6 +879,13 @@ int main(int argc, char **argv)
 #endif
 		print_roi_stats(i, &LLC);
 		//cout << "Major fault: " << major_fault[i] << " Minor fault: " << minor_fault[i] << endl;
+		cout << endl
+		     << "CPU " << i << " cumulative IPC: "
+		     << ((float)ooo_cpu[i].finish_sim_instr /
+			 ooo_cpu[i].finish_sim_cycle);
+		cout << " instructions: " << ooo_cpu[i].finish_sim_instr
+		     << " cycles: " << ooo_cpu[i].finish_sim_cycle << endl;
+
 	}
 
 	for (uint32_t i = 0; i < NUM_CPUS; i++) {
