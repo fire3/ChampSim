@@ -325,13 +325,14 @@ void O3_CPU::translate_fetch()
 			     });
 	if (itlb_req_end != IFETCH_BUFFER.end() ||
 	    itlb_req_begin == IFETCH_BUFFER.begin()) {
-		do_translate_fetch(itlb_req_begin, itlb_req_end);
 
-#if 0
+#if 1
 		if (!use_pcache)
 			do_translate_fetch(itlb_req_begin, itlb_req_end);
 		else
 			do_translate_fetch_pcache(itlb_req_begin, itlb_req_end);
+#else
+		do_translate_fetch(itlb_req_begin, itlb_req_end);
 #endif
 	}
 }
@@ -931,15 +932,7 @@ void O3_CPU::add_load_queue(
 			do_sq_forward_to_lq(*sq_it, *lq_it);
 	} else {
 		// If this entry is not waiting on RAW
-
-		if (!use_direct_segment)
-			RTL0.push(lq_it);
-		else {
-			lq_it->physical_address = vmem.pcache_va_to_pa(
-				cpu, lq_it->virtual_address);
-			lq_it->translated = COMPLETED;
-			RTL1.push(lq_it);
-		}
+		RTL0.push(lq_it);
 	}
 }
 
@@ -969,14 +962,7 @@ void O3_CPU::add_store_queue(
 	if (STA_head == STA_SIZE)
 		STA_head = 0;
 
-	if (!use_direct_segment)
-		RTS0.push(sq_it);
-	else {
-		sq_it->physical_address =
-			vmem.pcache_va_to_pa(cpu, sq_it->virtual_address);
-		sq_it->translated = COMPLETED;
-		RTS1.push(sq_it);
-	}
+	RTS0.push(sq_it);
 
 	DP(if (warmup_complete[cpu]) {
 		cout << "[SQ] " << __func__
@@ -998,17 +984,28 @@ void O3_CPU::operate_lsq()
 		// add it to DTLB
 		int rq_index;
 #if 1
-		if (!use_pcache)
+		if (!use_pcache && !use_direct_segment) {
 			rq_index = do_translate_store(RTS0.front());
-		else
+			if (rq_index == -2)
+				break;
+		}
+
+		if (use_pcache) {
 			rq_index = do_translate_store_pcache(RTS0.front());
+			if (rq_index == -2)
+				break;
+		}
+
+		if (use_direct_segment) {
+			RTS0.front()->physical_address = vmem.pcache_va_to_pa(
+				cpu, RTS0.front()->virtual_address);
+			RTS0.front()->translated = COMPLETED;
+			RTS1.push(RTS0.front());
+		}
 
 #else
 		rq_index = do_translate_store(RTS0.front());
 #endif
-
-		if (rq_index == -2)
-			break;
 
 		RTS0.pop();
 		store_issued++;
@@ -1027,22 +1024,32 @@ void O3_CPU::operate_lsq()
 		// add it to DTLB
 		int rq_index;
 #if 1
-		if (!use_pcache)
+		if (!use_pcache && !use_direct_segment) {
 			rq_index = do_translate_load(RTL0.front());
-		else
+			if (rq_index == -2)
+				break;
+		}
+		if (use_pcache) {
 			rq_index = do_translate_load_pcache(RTL0.front());
+			if (rq_index == -2)
+				break;
+		}
 
 #else
 		rq_index = do_translate_load(RTL0.front());
 #endif
 
-		if (rq_index == -2)
-			break;
-
 		if (use_pcache_preload) {
 			// push to RTL1 simultaneously
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
+			RTL1.push(RTL0.front());
+		}
+
+		if (use_direct_segment) {
+			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
+				cpu, RTL0.front()->virtual_address);
+			RTL0.front()->translated = COMPLETED;
 			RTL1.push(RTL0.front());
 		}
 

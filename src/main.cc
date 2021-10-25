@@ -102,6 +102,13 @@ void print_roi_stats(uint32_t cpu, CACHE *cache)
 	cout << " AVERAGE MISS LATENCY: "
 	     << (1.0 * (cache->total_miss_latency)) / TOTAL_MISS << " cycles"
 	     << endl;
+
+	cout << cache->NAME;
+	cout << " AVERAGE MISS RATIO: "
+	     << (100.0 * TOTAL_MISS) / TOTAL_ACCESS << "%"
+	     << endl;
+
+
 	//cout << " AVERAGE MISS LATENCY: " << (cache->total_miss_latency)/TOTAL_MISS << " cycles " << cache->total_miss_latency << "/" << TOTAL_MISS<< endl;
 }
 
@@ -868,14 +875,22 @@ int main(int argc, char **argv)
 	cout << endl << "Region of Interest Statistics" << endl;
 	for (uint32_t i = 0; i < NUM_CPUS; i++) {
 #ifndef CRC2_COMPILE
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].L1D);
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].L1I);
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].L1P);
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].L2C);
+		printf("\n");
 
 		print_roi_stats(i, &ooo_cpu[i].ITLB);
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].DTLB);
+		printf("\n");
 		print_roi_stats(i, &ooo_cpu[i].STLB);
+		printf("\n");
 #endif
 		print_roi_stats(i, &LLC);
 		//cout << "Major fault: " << major_fault[i] << " Minor fault: " << minor_fault[i] << endl;
