@@ -1166,9 +1166,9 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
 				    sq_it->virtual_address) { // this is required since a single instruction can issue multiple loads
 
 					// now we can resolve RAW dependency
-					assert(dependent->lq_index[j]
+					if(dependent->lq_index[j]
 						       ->producer_id ==
-					       sq_it->instr_id);
+					       sq_it->instr_id)
 					// update corresponding LQ entry
 					do_sq_forward_to_lq(
 						*sq_it,
