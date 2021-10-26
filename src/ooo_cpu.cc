@@ -1043,7 +1043,10 @@ void O3_CPU::operate_lsq()
 			// push to RTL1 simultaneously
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
-			RTL1.push(RTL0.front());
+			//RTL1.push(RTL0.front());
+			rq_index = execute_load(RTL0.front());
+			if (rq_index == -2)
+				break;
 		}
 
 		if (use_direct_segment) {
