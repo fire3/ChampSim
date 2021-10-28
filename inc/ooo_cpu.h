@@ -263,6 +263,11 @@ class O3_CPU {
 		execute_instruction(), schedule_memory_instruction(),
 		execute_memory_instruction(),
 		do_check_dib(ooo_model_instr &instr),
+		do_translate_fetch_dcache_ptable(
+			champsim::circular_buffer<ooo_model_instr>::iterator
+				begin,
+			champsim::circular_buffer<ooo_model_instr>::iterator
+				end),
 		do_translate_fetch_pcache(
 			champsim::circular_buffer<ooo_model_instr>::iterator
 				begin,
@@ -308,8 +313,10 @@ class O3_CPU {
 	int execute_load_pcache(std::vector<LSQ_ENTRY>::iterator lq_it);
 	int do_translate_store(std::vector<LSQ_ENTRY>::iterator sq_it);
 	int do_translate_store_pcache(std::vector<LSQ_ENTRY>::iterator sq_it);
+	int do_translate_store_dcache_ptable(std::vector<LSQ_ENTRY>::iterator sq_it);
 	int do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it);
 	int do_translate_load_pcache(std::vector<LSQ_ENTRY>::iterator lq_it);
+	int do_translate_load_dcache_ptable(std::vector<LSQ_ENTRY>::iterator lq_it);
 	void check_dependency(int prior, int current);
 	void operate_cache();
 	void complete_inflight_instruction();

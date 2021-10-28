@@ -16,8 +16,8 @@ extern uint8_t MAX_INSTR_DESTINATIONS;
 extern VirtualMemory vmem;
 
 extern uint8_t use_pcache;
+extern uint8_t use_dcache_ptable;
 extern uint8_t use_direct_segment;
-extern uint8_t use_pcache_preload;
 
 void O3_CPU::initialize_core()
 {
@@ -120,6 +120,8 @@ uint32_t O3_CPU::init_instruction(ooo_model_instr arch_instr)
 			arch_instr.num_mem_ops++;
 			if (use_pcache)
 				arch_instr.num_pcache_ops++;
+			if (use_dcache_ptable)
+				arch_instr.num_ptable_ops++;
 		}
 	}
 
@@ -325,15 +327,51 @@ void O3_CPU::translate_fetch()
 			     });
 	if (itlb_req_end != IFETCH_BUFFER.end() ||
 	    itlb_req_begin == IFETCH_BUFFER.begin()) {
-
 #if 1
-		if (!use_pcache)
+		if (use_pcache)
+			do_translate_fetch_pcache(itlb_req_begin, itlb_req_end);
+		else if (use_dcache_ptable)
 			do_translate_fetch(itlb_req_begin, itlb_req_end);
 		else
-			do_translate_fetch_pcache(itlb_req_begin, itlb_req_end);
+			do_translate_fetch(itlb_req_begin, itlb_req_end);
 #else
 		do_translate_fetch(itlb_req_begin, itlb_req_end);
 #endif
+	}
+}
+
+void O3_CPU::do_translate_fetch_dcache_ptable(
+	champsim::circular_buffer<ooo_model_instr>::iterator begin,
+	champsim::circular_buffer<ooo_model_instr>::iterator end)
+{
+	PACKET trace_packet;
+
+	trace_packet.fill_level = FILL_L1;
+	trace_packet.cpu = cpu;
+	trace_packet.address =
+		vmem.va_to_ptable_pa(begin->ip) >> LOG2_BLOCK_SIZE;
+	assert(trace_packet.address != 0);
+	trace_packet.full_addr = begin->ip;
+	trace_packet.full_v_addr = begin->ip;
+	trace_packet.instr_id = begin->instr_id;
+	trace_packet.ip = begin->ip;
+	trace_packet.type = LOAD;
+	trace_packet.asid[0] = 0;
+	trace_packet.asid[1] = 0;
+	trace_packet.event_cycle = current_core_cycle[cpu];
+	trace_packet.to_return = { &L1D_bus };
+	for (; begin != end; ++begin) {
+		trace_packet.instr_depend_on_me.push_back(begin);
+		//printf("translate fetch: %#lx paddr:%#lx\n",
+		//      begin->ip, trace_packet.address);
+	}
+
+	int rq_index = L1D_bus.lower_level->add_rq(&trace_packet);
+	if (rq_index != -2) {
+		// successfully sent to the ITLB, so mark all instructions in the IFETCH_BUFFER that match this ip as translated INFLIGHT
+		for (auto dep_it : trace_packet.instr_depend_on_me) {
+			dep_it->translated = INFLIGHT;
+		}
 	}
 }
 
@@ -842,8 +880,10 @@ void O3_CPU::do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry)
 	lq_entry.fetched = COMPLETED;
 
 	lq_entry.rob_index->num_mem_ops--;
-	if (use_pcache_preload)
+	if (use_pcache)
 		lq_entry.rob_index->num_pcache_ops--;
+	if (use_dcache_ptable)
+		lq_entry.rob_index->num_ptable_ops--;
 	lq_entry.rob_index->event_cycle = current_core_cycle[cpu];
 
 	assert(lq_entry.rob_index->num_mem_ops >= 0);
@@ -983,30 +1023,24 @@ void O3_CPU::operate_lsq()
 	while (store_issued < SQ_WIDTH && !RTS0.empty()) {
 		// add it to DTLB
 		int rq_index;
-#if 1
-		if (!use_pcache && !use_direct_segment) {
-			rq_index = do_translate_store(RTS0.front());
-			if (rq_index == -2)
-				break;
-		}
-
 		if (use_pcache) {
 			rq_index = do_translate_store_pcache(RTS0.front());
 			if (rq_index == -2)
 				break;
-		}
-
-		if (use_direct_segment) {
+		} else if (use_direct_segment) {
 			RTS0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTS0.front()->virtual_address);
 			RTS0.front()->translated = COMPLETED;
 			RTS1.push(RTS0.front());
+		} else if (use_dcache_ptable) {
+			rq_index = do_translate_store_dcache_ptable(RTS0.front());
+			if (rq_index == -2)
+				break;
+		} else {
+			rq_index = do_translate_store(RTS0.front());
+			if (rq_index == -2)
+				break;
 		}
-
-#else
-		rq_index = do_translate_store(RTS0.front());
-#endif
-
 		RTS0.pop();
 		store_issued++;
 	}
@@ -1023,23 +1057,11 @@ void O3_CPU::operate_lsq()
 	while (load_issued < LQ_WIDTH && !RTL0.empty()) {
 		// add it to DTLB
 		int rq_index;
-#if 1
-		if (!use_pcache && !use_direct_segment) {
-			rq_index = do_translate_load(RTL0.front());
-			if (rq_index == -2)
-				break;
-		}
+
 		if (use_pcache) {
 			rq_index = do_translate_load_pcache(RTL0.front());
 			if (rq_index == -2)
 				break;
-		}
-
-#else
-		rq_index = do_translate_load(RTL0.front());
-#endif
-
-		if (use_pcache_preload) {
 			// push to RTL1 simultaneously
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
@@ -1047,13 +1069,27 @@ void O3_CPU::operate_lsq()
 			rq_index = execute_load(RTL0.front());
 			if (rq_index == -2)
 				break;
-		}
-
-		if (use_direct_segment) {
+		} else if (use_dcache_ptable) {
+			rq_index =
+				do_translate_load_dcache_ptable(RTL0.front());
+			if (rq_index == -2)
+				break;
+			// push to RTL1 simultaneously
+			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
+				cpu, RTL0.front()->virtual_address);
+			//RTL1.push(RTL0.front());
+			rq_index = execute_load(RTL0.front());
+			if (rq_index == -2)
+				break;
+		} else if (use_direct_segment) {
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
 			RTL0.front()->translated = COMPLETED;
 			RTL1.push(RTL0.front());
+		} else {
+			rq_index = do_translate_load(RTL0.front());
+			if (rq_index == -2)
+				break;
 		}
 
 		RTL0.pop();
@@ -1069,6 +1105,33 @@ void O3_CPU::operate_lsq()
 		RTL1.pop();
 		load_issued++;
 	}
+}
+
+int O3_CPU::do_translate_store_dcache_ptable(
+	std::vector<LSQ_ENTRY>::iterator sq_it)
+{
+	PACKET data_packet;
+
+	data_packet.fill_level = FILL_L1;
+	data_packet.cpu = cpu;
+	data_packet.address =
+		vmem.va_to_ptable_pa(sq_it->virtual_address) >> LOG2_BLOCK_SIZE;
+	data_packet.full_addr = sq_it->virtual_address;
+	data_packet.full_v_addr = sq_it->virtual_address;
+	data_packet.instr_id = sq_it->instr_id;
+	data_packet.ip = sq_it->ip;
+	data_packet.type = LOAD;
+	data_packet.asid[0] = sq_it->asid[0];
+	data_packet.asid[1] = sq_it->asid[1];
+	data_packet.event_cycle = sq_it->event_cycle;
+	data_packet.to_return = { &L1D_bus };
+	data_packet.sq_index_depend_on_me = { sq_it };
+	int rq_index = L1D_bus.lower_level->add_rq(&data_packet);
+
+	if (rq_index != -2)
+		sq_it->translated = INFLIGHT;
+
+	return rq_index;
 }
 
 int O3_CPU::do_translate_store_pcache(std::vector<LSQ_ENTRY>::iterator sq_it)
@@ -1169,18 +1232,45 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
 				    sq_it->virtual_address) { // this is required since a single instruction can issue multiple loads
 
 					// now we can resolve RAW dependency
-					if(dependent->lq_index[j]
-						       ->producer_id ==
-					       sq_it->instr_id)
-					// update corresponding LQ entry
-					do_sq_forward_to_lq(
-						*sq_it,
-						*(dependent->lq_index[j]));
+					if (dependent->lq_index[j]->producer_id ==
+					    sq_it->instr_id)
+						// update corresponding LQ entry
+						do_sq_forward_to_lq(
+							*sq_it,
+							*(dependent
+								  ->lq_index[j]));
 				}
 			}
 		}
 	}
 }
+
+int O3_CPU::do_translate_load_dcache_ptable(
+	std::vector<LSQ_ENTRY>::iterator lq_it)
+{
+	PACKET data_packet;
+	data_packet.fill_level = FILL_L1;
+	data_packet.cpu = cpu;
+	data_packet.address =
+		vmem.va_to_ptable_pa(lq_it->virtual_address) >> LOG2_BLOCK_SIZE;
+	data_packet.full_addr = vmem.va_to_ptable_pa(lq_it->virtual_address);
+	data_packet.full_v_addr = lq_it->virtual_address;
+	data_packet.instr_id = lq_it->instr_id;
+	data_packet.ip = lq_it->ip;
+	data_packet.type = LOAD;
+	data_packet.asid[0] = lq_it->asid[0];
+	data_packet.asid[1] = lq_it->asid[1];
+	data_packet.event_cycle = lq_it->event_cycle;
+	data_packet.to_return = { &L1D_bus };
+	data_packet.pq_index_depend_on_me = { lq_it };
+	int rq_index = L1D_bus.lower_level->add_rq(&data_packet);
+
+	if (rq_index != -2)
+		lq_it->translated = INFLIGHT;
+
+	return rq_index;
+}
+
 int O3_CPU::do_translate_load_pcache(std::vector<LSQ_ENTRY>::iterator lq_it)
 {
 	PACKET data_packet;
@@ -1326,8 +1416,11 @@ void O3_CPU::complete_inflight_instruction()
 			if ((rob_it->executed == INFLIGHT) &&
 			    (rob_it->event_cycle <= current_core_cycle[cpu]) &&
 			    rob_it->num_mem_ops == 0) {
-				if (use_pcache && use_pcache_preload) {
+				if (use_pcache) {
 					if (rob_it->num_pcache_ops == 0)
+						do_complete_execution(rob_it);
+				} else if (use_dcache_ptable) {
+					if (rob_it->num_ptable_ops == 0)
 						do_complete_execution(rob_it);
 				} else
 					do_complete_execution(rob_it);
@@ -1480,26 +1573,82 @@ void O3_CPU::handle_memory_return()
 		current_core_cycle[cpu])) { // L1D
 		PACKET &l1d_entry = L1D_bus.PROCESSED.front();
 
-		for (auto merged : l1d_entry.lq_index_depend_on_me) {
-			merged->fetched = COMPLETED;
-			merged->event_cycle = current_core_cycle[cpu];
-			merged->rob_index->num_mem_ops--;
-			merged->rob_index->event_cycle = l1d_entry.event_cycle;
+		if (use_dcache_ptable) {
+			while (!l1d_entry.lq_index_depend_on_me.empty()) {
+				auto merged =
+					l1d_entry.lq_index_depend_on_me.front();
+				merged->fetched = COMPLETED;
+				merged->event_cycle = current_core_cycle[cpu];
+				merged->rob_index->num_mem_ops--;
+				merged->rob_index->event_cycle =
+					l1d_entry.event_cycle;
 
-			if (merged->rob_index->num_mem_ops == 0)
-				inflight_mem_executions++;
+				l1d_entry.lq_index_depend_on_me.pop_front();
 
-			LSQ_ENTRY empty_entry;
-			if (use_pcache_preload) {
-				if (merged->translated == COMPLETED)
+				LSQ_ENTRY empty_entry;
+				if (merged->translated == COMPLETED) {
 					*merged = empty_entry;
-			} else
-				*merged = empty_entry;
-		}
+				}
+			}
+			while (!l1d_entry.pq_index_depend_on_me.empty()) {
+				auto merged =
+					l1d_entry.pq_index_depend_on_me.front();
+				merged->translated = COMPLETED;
+				merged->event_cycle = current_core_cycle[cpu];
+				merged->rob_index->num_ptable_ops--;
+				merged->rob_index->event_cycle =
+					l1d_entry.event_cycle;
 
-		// remove this entry
-		L1D_bus.PROCESSED.pop_front();
-		--to_read;
+
+				l1d_entry.pq_index_depend_on_me.pop_front();
+
+				LSQ_ENTRY empty_entry;
+				if (merged->fetched == COMPLETED) {
+					*merged = empty_entry;
+				}
+			}
+			while (!l1d_entry.sq_index_depend_on_me.empty()) {
+				auto merged =
+					l1d_entry.sq_index_depend_on_me.front();
+				merged->event_cycle = current_core_cycle[cpu];
+				merged->translated = COMPLETED;
+				merged->physical_address = vmem.pcache_va_to_pa(cpu, merged->virtual_address);
+
+				l1d_entry.sq_index_depend_on_me.pop_front();
+
+				RTS1.push(merged);
+			}
+
+			if (l1d_entry.lq_index_depend_on_me.empty() &&
+			    l1d_entry.sq_index_depend_on_me.empty() &&
+			    l1d_entry.pq_index_depend_on_me.empty() 
+			    )
+				L1D_bus.PROCESSED.pop_front();
+			--to_read;
+
+		} else {
+			for (auto merged : l1d_entry.lq_index_depend_on_me) {
+				merged->fetched = COMPLETED;
+				merged->event_cycle = current_core_cycle[cpu];
+				merged->rob_index->num_mem_ops--;
+				merged->rob_index->event_cycle =
+					l1d_entry.event_cycle;
+
+				if (merged->rob_index->num_mem_ops == 0)
+					inflight_mem_executions++;
+
+				LSQ_ENTRY empty_entry;
+				if (use_pcache) {
+					if (merged->translated == COMPLETED)
+						*merged = empty_entry;
+				} else
+					*merged = empty_entry;
+			}
+
+			// remove this entry
+			L1D_bus.PROCESSED.pop_front();
+			--to_read;
+		}
 	}
 
 	available_fetch_bandwidth = FETCH_WIDTH;
@@ -1518,12 +1667,12 @@ void O3_CPU::handle_memory_return()
 			merged->event_cycle = current_core_cycle[cpu];
 			merged->rob_index->num_pcache_ops--;
 
-			if (!use_pcache_preload)
+			if (!use_pcache)
 				RTL1.push(merged);
 			l1p_entry.lq_index_depend_on_me.pop_front();
 
 			LSQ_ENTRY empty_entry;
-			if (use_pcache_preload) {
+			if (use_pcache) {
 				if (merged->fetched == COMPLETED) {
 					*merged = empty_entry;
 				}

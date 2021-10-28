@@ -9,9 +9,6 @@
 #include "champsim.h"
 #include "util.h"
 
-extern uint8_t use_pcache;
-extern uint8_t use_direct_segment;
-
 extern uint64_t code_size, heap_size, mmap_size, stack_size;
 
 VirtualMemory::VirtualMemory(uint64_t capacity, uint64_t pg_size,
@@ -54,7 +51,6 @@ uint64_t VirtualMemory::pa_to_ptable_pa(uint64_t paddr)
 
 void VirtualMemory::setup_pcache()
 {
-	if (use_pcache || use_direct_segment) {
                 ptable_start = 0x2000;
                 ptable_size = pmem_size / PAGE_SIZE;
 
@@ -91,7 +87,6 @@ void VirtualMemory::setup_pcache()
 		       mmap_virt_end, mmap_phys_start, mmap_phys_end);
 		printf("Stack [%#lx-%#lx] - [%#lx-%#lx]\n", stack_virt_start,
 		       stack_virt_end, stack_phys_start, stack_phys_end);
-	}
 
 }
 

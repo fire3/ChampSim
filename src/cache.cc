@@ -226,6 +226,7 @@ bool CACHE::readlike_miss(PACKET &handle_pkt)
         // update fill location
         mshr_entry->fill_level = std::min(mshr_entry->fill_level, handle_pkt.fill_level);
 
+        packet_dep_merge(mshr_entry->pq_index_depend_on_me, handle_pkt.pq_index_depend_on_me);
         packet_dep_merge(mshr_entry->lq_index_depend_on_me, handle_pkt.lq_index_depend_on_me);
         packet_dep_merge(mshr_entry->sq_index_depend_on_me, handle_pkt.sq_index_depend_on_me);
         packet_dep_merge(mshr_entry->instr_depend_on_me, handle_pkt.instr_depend_on_me);
@@ -471,6 +472,7 @@ int CACHE::add_rq(PACKET *packet)
     auto found_rq = std::find_if(RQ.begin(), RQ.end(), eq_addr<PACKET>(packet->address));
     if (found_rq != RQ.end()) {
 
+        packet_dep_merge(found_rq->pq_index_depend_on_me, packet->pq_index_depend_on_me);
         packet_dep_merge(found_rq->lq_index_depend_on_me, packet->lq_index_depend_on_me);
         packet_dep_merge(found_rq->sq_index_depend_on_me, packet->sq_index_depend_on_me);
         packet_dep_merge(found_rq->instr_depend_on_me, packet->instr_depend_on_me);

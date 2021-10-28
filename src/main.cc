@@ -26,8 +26,8 @@ uint64_t warmup_instructions = 1000000, simulation_instructions = 10000000,
 	 champsim_seed;
 
 uint8_t use_pcache = 0;
-uint8_t use_pcache_preload = 0;
 uint8_t use_direct_segment = 0;
+uint8_t use_dcache_ptable = 0;
 uint8_t use_rmm = 0;
 
 uint64_t code_size = 0x800000, heap_size = 0x10000000,
@@ -104,10 +104,8 @@ void print_roi_stats(uint32_t cpu, CACHE *cache)
 	     << endl;
 
 	cout << cache->NAME;
-	cout << " AVERAGE MISS RATIO: "
-	     << (100.0 * TOTAL_MISS) / TOTAL_ACCESS << "%"
-	     << endl;
-
+	cout << " AVERAGE MISS RATIO: " << (100.0 * TOTAL_MISS) / TOTAL_ACCESS
+	     << "%" << endl;
 
 	//cout << " AVERAGE MISS LATENCY: " << (cache->total_miss_latency)/TOTAL_MISS << " cycles " << cache->total_miss_latency << "/" << TOTAL_MISS<< endl;
 }
@@ -334,6 +332,9 @@ void print_deadlock(uint32_t i)
 	cout << " is_memory: " << +ooo_cpu[i].ROB.front().is_memory;
 	cout << " num_reg_dependent: "
 	     << +ooo_cpu[i].ROB.front().num_reg_dependent;
+	cout << " num_mem_ops: " << +ooo_cpu[i].ROB.front().num_mem_ops;
+	cout << " num_pcache_ops: " << +ooo_cpu[i].ROB.front().num_pcache_ops;
+	cout << " num_ptable_ops: " << +ooo_cpu[i].ROB.front().num_ptable_ops;
 	cout << " event: " << ooo_cpu[i].ROB.front().event_cycle;
 	cout << " current: " << current_core_cycle[i] << endl;
 
@@ -450,22 +451,23 @@ int main(int argc, char **argv)
 			  'i' },
 			{ "no_heartbeat", no_argument, 0, 'n' },
 			{ "pcache", no_argument, 0, 'p' },
-			{ "pcache_preload", no_argument, 0, 'l' },
+			{ "ptable", no_argument, 0, 'd' },
 			{ "code", required_argument, 0, 'c' },
 			{ "stack", required_argument, 0, 's' },
 			{ "heap", required_argument, 0, 'h' },
 			{ "mmap", required_argument, 0, 'm' },
-			{ "cloudsuite", no_argument, 0, 'd' },
+			{ "cloudsuite", no_argument, 0, 'e' },
 			{ "low_bandwidth", no_argument, 0, 'b' },
 			{ "traces", no_argument, 0, 't' },
-			{ "direct_segment", no_argument, 0, 1},
-			{ "rmm", no_argument, 0, 2},
+			{ "direct_segment", no_argument, 0, 1 },
+			{ "rmm", no_argument, 0, 2 },
 			{ 0, 0, 0, 0 }
 		};
 
 		int option_index = 0;
 
-		c = getopt_long_only(argc, argv, "w:i:npldbc:s:h:m:", long_options,
+		c = getopt_long_only(argc, argv,
+				     "w:i:npdldbc:s:h:m:", long_options,
 				     &option_index);
 
 		// no more option characters
@@ -489,13 +491,11 @@ int main(int argc, char **argv)
 			break;
 		case 'p':
 			use_pcache = 1;
-			use_pcache_preload = 0;
-			break;
-		case 'l':
-			use_pcache = 1;
-			use_pcache_preload = 1;
 			break;
 		case 'd':
+			use_dcache_ptable = 1;
+			break;
+		case 'e':
 			knob_cloudsuite = 1;
 			MAX_INSTR_DESTINATIONS = NUM_INSTR_DESTINATIONS_SPARC;
 			break;
@@ -533,8 +533,9 @@ int main(int argc, char **argv)
 	cout << "LLC sets: " << LLC_SET << endl;
 	cout << "LLC ways: " << LLC_WAY << endl;
 
-        if (use_pcache || use_direct_segment) {
-		if (code_size == 0 || heap_size == 0 || mmap_size == 0 || stack_size == 0) {
+	if (use_pcache || use_direct_segment || use_dcache_ptable) {
+		if (code_size == 0 || heap_size == 0 || mmap_size == 0 ||
+		    stack_size == 0) {
 			printf("Please indicate the correct code/heap/mmap/stack size.\n");
 			exit(1);
 		}
@@ -542,13 +543,11 @@ int main(int argc, char **argv)
 		printf("Heap size: %#lx\n", heap_size);
 		printf("Mmap size: %#lx\n", mmap_size);
 		printf("Stack size: %#lx\n", stack_size);
-                vmem.setup_pcache();
+		vmem.setup_pcache();
 	}
 
 	if (use_pcache)
 		printf("Pcache enabled.\n");
-	if (use_pcache_preload)
-		printf("Pcache preload enabled.\n");
 
 	if (use_direct_segment)
 		printf("Direct segment enabled.\n");
@@ -900,7 +899,6 @@ int main(int argc, char **argv)
 			 ooo_cpu[i].finish_sim_cycle);
 		cout << " instructions: " << ooo_cpu[i].finish_sim_instr
 		     << " cycles: " << ooo_cpu[i].finish_sim_cycle << endl;
-
 	}
 
 	for (uint32_t i = 0; i < NUM_CPUS; i++) {
