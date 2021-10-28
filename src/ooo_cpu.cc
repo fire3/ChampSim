@@ -1595,7 +1595,8 @@ void O3_CPU::handle_memory_return()
 					l1d_entry.pq_index_depend_on_me.front();
 				merged->translated = COMPLETED;
 				merged->event_cycle = current_core_cycle[cpu];
-				merged->rob_index->num_ptable_ops--;
+				if (merged->rob_index->num_ptable_ops > 0)
+					merged->rob_index->num_ptable_ops--;
 				merged->rob_index->event_cycle =
 					l1d_entry.event_cycle;
 
@@ -1665,7 +1666,8 @@ void O3_CPU::handle_memory_return()
 			merged->physical_address = vmem.pcache_va_to_pa(
 				cpu, merged->virtual_address);
 			merged->event_cycle = current_core_cycle[cpu];
-			merged->rob_index->num_pcache_ops--;
+			if (merged->rob_index->num_pcache_ops > 0)
+				merged->rob_index->num_pcache_ops--;
 
 			if (!use_pcache)
 				RTL1.push(merged);
