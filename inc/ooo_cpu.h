@@ -263,6 +263,11 @@ class O3_CPU {
 		execute_instruction(), schedule_memory_instruction(),
 		execute_memory_instruction(),
 		do_check_dib(ooo_model_instr &instr),
+		do_translate_fetch_ds(
+			champsim::circular_buffer<ooo_model_instr>::iterator
+				begin,
+			champsim::circular_buffer<ooo_model_instr>::iterator
+				end),
 		do_translate_fetch_dcache_ptable(
 			champsim::circular_buffer<ooo_model_instr>::iterator
 				begin,

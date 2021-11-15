@@ -332,12 +332,26 @@ void O3_CPU::translate_fetch()
 			do_translate_fetch_pcache(itlb_req_begin, itlb_req_end);
 		else if (use_dcache_ptable)
 			do_translate_fetch(itlb_req_begin, itlb_req_end);
+		else if (use_direct_segment)
+			do_translate_fetch_ds(itlb_req_begin, itlb_req_end);
 		else
 			do_translate_fetch(itlb_req_begin, itlb_req_end);
 #else
 		do_translate_fetch(itlb_req_begin, itlb_req_end);
 #endif
 	}
+}
+
+
+void O3_CPU::do_translate_fetch_ds(
+	champsim::circular_buffer<ooo_model_instr>::iterator begin,
+	champsim::circular_buffer<ooo_model_instr>::iterator end)
+{
+	for (; begin != end; ++begin) {
+		begin->instruction_pa = vmem.pcache_va_to_pa(cpu, begin->ip);
+		begin->translated = COMPLETED;
+	}
+
 }
 
 void O3_CPU::do_translate_fetch_dcache_ptable(

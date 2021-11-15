@@ -480,6 +480,9 @@ int main(int argc, char **argv)
 		case 1:
 			use_direct_segment = 1;
 			break;
+		case 2:
+			use_rmm = 1;
+			break;
 		case 'w':
 			warmup_instructions = atol(optarg);
 			break;
