@@ -8,7 +8,7 @@
 #include "util.h"
 #define BLOCK_SIZE 64u
 #define LOG2_BLOCK_SIZE lg2(BLOCK_SIZE)
-#define PAGE_SIZE 2097152u
+#define PAGE_SIZE 4096u
 #define LOG2_PAGE_SIZE lg2(PAGE_SIZE)
 #define STAT_PRINTING_PERIOD 10000000u
 #define NUM_CPUS 1u

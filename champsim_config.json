@@ -1,7 +1,7 @@
 {
     "executable_name": "bin/champsim",
     "block_size": 64,
-    "page_size": 2097152,
+    "page_size": 4096,
     "heartbeat_frequency": 10000000,
     "cpu_clock_freq": 4000,
     "num_cores": 1,
@@ -69,8 +69,8 @@
     },
 
     "L1P": {
-        "sets": 16,
-        "ways": 8,
+        "sets": 1,
+        "ways": 64,
         "rq_size": 16,
         "wq_size": 16,
         "pq_size": 4,
