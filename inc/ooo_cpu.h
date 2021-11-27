@@ -15,6 +15,7 @@
 #define DEADLOCK_CYCLE 1000000
 
 using namespace std;
+extern uint8_t use_rmm;
 
 #define STA_SIZE (ROB_SIZE * NUM_INSTR_DESTINATIONS_SPARC)
 
@@ -140,6 +141,8 @@ class O3_CPU {
 		     L2C_MAX_READ,  L2C_MAX_WRITE,   L2C_PREF_LOAD,
 		     L2C_VA_PREF };
 
+	RangeTLB RTLB{ "RangeTLB", cpu, 1, 8, 4};
+
 	CacheBus ITLB_bus{ &ITLB }, DTLB_bus{ &DTLB }, L1I_bus{ &L1I },
 		L1D_bus{ &L1D }, L1P_bus{ &L1P };
 
@@ -168,11 +171,15 @@ class O3_CPU {
 		ITLB.cache_type = IS_ITLB;
 		ITLB.fill_level = FILL_L1;
 		ITLB.lower_level = &STLB;
+		if (use_rmm)
+			ITLB.lower_level = &RTLB;
 
 		DTLB.cpu = this->cpu;
 		DTLB.cache_type = IS_DTLB;
 		DTLB.fill_level = FILL_L1;
 		DTLB.lower_level = &STLB;
+		if (use_rmm)
+			DTLB.lower_level = &RTLB;
 
 		STLB.cpu = this->cpu;
 		STLB.cache_type = IS_STLB;

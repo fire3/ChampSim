@@ -7,6 +7,79 @@ extern VirtualMemory vmem;
 extern uint64_t current_core_cycle[NUM_CPUS];
 extern uint8_t warmup_complete[NUM_CPUS];
 extern uint8_t use_pcache;
+extern uint8_t use_rmm;
+
+RangeTLB::RangeTLB(string name, uint32_t cpu, uint32_t max_read, uint32_t rq_size, uint32_t latency) 
+: NAME(name), cpu(cpu), MAX_READ(max_read), RQ{rq_size, latency} 
+{
+
+}
+uint32_t RangeTLB::get_occupancy(uint8_t queue_type, uint64_t address)
+{
+	if (queue_type == 1)
+		return RQ.occupancy();
+	return 0;
+}
+
+uint32_t RangeTLB::get_size(uint8_t queue_type, uint64_t address)
+{
+	if (queue_type == 1)
+		return RQ.size();
+	return 0;
+}
+
+
+void RangeTLB::handle_read()
+{
+	int reads_this_cycle = MAX_READ;
+
+	while (reads_this_cycle > 0 && RQ.has_ready()) {
+		PACKET &handle_pkt = RQ.front();
+
+#if 0
+		if (warmup_complete[cpu])
+			printf("RTLB: handle_read: %#lx\n",
+			       handle_pkt.full_v_addr);
+#endif
+		handle_pkt.data = vmem.pcache_va_to_pa(cpu, handle_pkt.full_v_addr) >> LOG2_PAGE_SIZE;
+		for(auto ret: handle_pkt.to_return)
+			ret->return_data(&handle_pkt);
+
+		RQ.pop_front();
+		reads_this_cycle--;
+	}
+}
+void RangeTLB::return_data(PACKET *packet)
+{
+
+}
+
+void RangeTLB::operate()
+{
+	handle_read();
+	RQ.operate();
+}
+
+int RangeTLB::add_rq(PACKET *packet)
+{
+	assert(packet->address != 0);
+
+	// check for duplicates in the read queue
+	auto found_rq = std::find_if(RQ.begin(), RQ.end(),
+				     eq_addr<PACKET>(packet->address));
+	assert(found_rq == RQ.end()); //Duplicate request should not be sent.
+
+	// check occupancy
+	if (RQ.full()) {
+		return -2; // cannot handle this request
+	}
+
+	// if there is no duplicate, add it to RQ
+	RQ.push_back(*packet);
+
+	return RQ.occupancy();
+}
+
 
 PageTableWalker::PageTableWalker(string v1, uint32_t cpu, uint32_t v2,
 				 uint32_t v3, uint32_t v4, uint32_t v5,
@@ -141,14 +214,14 @@ void PageTableWalker::handle_fill()
 			}
 
 			//Return the translated physical address to STLB. Does not contain last 12 bits
-			if (use_pcache)
+			if (use_pcache || use_rmm)
 				fill_mshr->data =
 					vmem.pcache_va_to_pa(cpu,
 						      fill_mshr->full_v_addr) >>
 					LOG2_PAGE_SIZE;
 			else
 				fill_mshr->data =
-					vmem.va_to_pa(cpu,
+					vmem.pcache_va_to_pa(cpu,
 						      fill_mshr->full_v_addr) >>
 					LOG2_PAGE_SIZE;
 

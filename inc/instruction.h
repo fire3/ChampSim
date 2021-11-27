@@ -88,6 +88,7 @@ struct ooo_model_instr {
             executed = 0;
     int num_reg_ops = 0, num_mem_ops = 0, num_reg_dependent = 0;
     int num_pcache_ops = 0;
+    int num_tsp_ops = 0;
     int num_ptable_ops = 0;
 
     uint8_t destination_registers[NUM_INSTR_DESTINATIONS_SPARC] = {}; // output registers

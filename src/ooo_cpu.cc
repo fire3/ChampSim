@@ -16,6 +16,7 @@ extern uint8_t MAX_INSTR_DESTINATIONS;
 extern VirtualMemory vmem;
 
 extern uint8_t use_pcache;
+extern uint8_t use_tsp;
 extern uint8_t use_dcache_ptable;
 extern uint8_t use_direct_segment;
 
@@ -118,6 +119,8 @@ uint32_t O3_CPU::init_instruction(ooo_model_instr arch_instr)
 			arch_instr.num_reg_ops++;
 		if (arch_instr.source_memory[i]) {
 			arch_instr.num_mem_ops++;
+			if (use_tsp)
+				arch_instr.num_tsp_ops++;
 			if (use_pcache)
 				arch_instr.num_pcache_ops++;
 			if (use_dcache_ptable)
@@ -632,12 +635,12 @@ int O3_CPU::prefetch_code_line(uint64_t pf_v_addr)
 	if (!L1I.PQ.full()) {
 		// magically translate prefetches
 		uint64_t pf_pa;
-		if (use_pcache)
+		if (use_pcache || use_rmm || use_direct_segment || use_tsp)
 			pf_pa = splice_bits(vmem.pcache_va_to_pa(cpu,
 								 pf_v_addr),
 					    pf_v_addr, LOG2_PAGE_SIZE);
 		else
-			pf_pa = splice_bits(vmem.va_to_pa(cpu, pf_v_addr),
+			pf_pa = splice_bits(vmem.pcache_va_to_pa(cpu, pf_v_addr),
 					    pf_v_addr, LOG2_PAGE_SIZE);
 
 		PACKET pf_packet;
@@ -898,6 +901,9 @@ void O3_CPU::do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry)
 		lq_entry.rob_index->num_pcache_ops--;
 	if (use_dcache_ptable)
 		lq_entry.rob_index->num_ptable_ops--;
+	if (use_tsp)
+		lq_entry.rob_index->num_tsp_ops--;
+
 	lq_entry.rob_index->event_cycle = current_core_cycle[cpu];
 
 	assert(lq_entry.rob_index->num_mem_ops >= 0);
@@ -957,6 +963,7 @@ void O3_CPU::add_load_queue(
 	// add it to the load queue
 	rob_it->lq_index[data_index] = lq_it;
 	rob_it->source_added[data_index] = 1;
+
 	lq_it->instr_id = rob_it->instr_id;
 	lq_it->virtual_address = rob_it->source_memory[data_index];
 	lq_it->ip = rob_it->ip;
@@ -1045,7 +1052,8 @@ void O3_CPU::operate_lsq()
 			RTS0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTS0.front()->virtual_address);
 			RTS0.front()->translated = COMPLETED;
-			RTS1.push(RTS0.front());
+			execute_store(RTS0.front());
+			//RTS1.push(RTS0.front());
 		} else if (use_dcache_ptable) {
 			rq_index = do_translate_store_dcache_ptable(RTS0.front());
 			if (rq_index == -2)
@@ -1099,7 +1107,20 @@ void O3_CPU::operate_lsq()
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
 			RTL0.front()->translated = COMPLETED;
-			RTL1.push(RTL0.front());
+			//RTL1.push(RTL0.front());
+			rq_index = execute_load(RTL0.front());
+			if (rq_index == -2)
+				break;
+		} else if (use_tsp) {
+			rq_index = do_translate_load(RTL0.front());
+			if (rq_index == -2)
+				break;
+			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
+				cpu, RTL0.front()->virtual_address);
+			rq_index = execute_load(RTL0.front());
+			if (rq_index == -2) {
+				break;
+			}
 		} else {
 			rq_index = do_translate_load(RTL0.front());
 			if (rq_index == -2)
@@ -1310,9 +1331,11 @@ int O3_CPU::do_translate_load_pcache(std::vector<LSQ_ENTRY>::iterator lq_it)
 	return rq_index;
 }
 
+
 int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 {
 	PACKET data_packet;
+	int rq_index = 0;
 	data_packet.fill_level = FILL_L1;
 	data_packet.cpu = cpu;
 	if (knob_cloudsuite)
@@ -1331,6 +1354,7 @@ int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 	data_packet.to_return = { &DTLB_bus };
 	data_packet.lq_index_depend_on_me = { lq_it };
 
+
 	DP(if (warmup_complete[cpu]) {
 		std::cout << "[RTL0] " << __func__
 			  << " instr_id: " << lq_it->instr_id
@@ -1338,10 +1362,18 @@ int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 			  << " is popped to RTL0" << std::endl;
 	})
 
-	int rq_index = DTLB_bus.lower_level->add_rq(&data_packet);
-
-	if (rq_index != -2)
-		lq_it->translated = INFLIGHT;
+	if (use_tsp) {
+		if (lq_it->translated == 0) {
+			rq_index  = DTLB_bus.lower_level->add_rq(&data_packet);
+			if (rq_index != -2)
+				lq_it->translated = INFLIGHT;
+		}
+	} else {
+		rq_index  = DTLB_bus.lower_level->add_rq(&data_packet);
+		if (rq_index != -2)
+			lq_it->translated = INFLIGHT;
+	}
+		
 
 	return rq_index;
 }
@@ -1415,6 +1447,7 @@ void O3_CPU::operate_cache()
 	ITLB.operate();
 
 	PTW.operate();
+	RTLB.operate();
 
 	// also handle per-cycle prefetcher operation
 	l1i_prefetcher_cycle_operate();
@@ -1435,6 +1468,9 @@ void O3_CPU::complete_inflight_instruction()
 						do_complete_execution(rob_it);
 				} else if (use_dcache_ptable) {
 					if (rob_it->num_ptable_ops == 0)
+						do_complete_execution(rob_it);
+				} else if (use_tsp) {
+					if (rob_it->num_tsp_ops == 0)
 						do_complete_execution(rob_it);
 				} else
 					do_complete_execution(rob_it);
@@ -1566,14 +1602,31 @@ void O3_CPU::handle_memory_return()
 		}
 
 		for (auto lq_merged : dtlb_entry.lq_index_depend_on_me) {
-			lq_merged->physical_address = splice_bits(
-				dtlb_entry.data << LOG2_PAGE_SIZE,
-				lq_merged->virtual_address,
-				LOG2_PAGE_SIZE); // translated address
+			if (!use_tsp) {
+				lq_merged->physical_address = splice_bits(
+					dtlb_entry.data << LOG2_PAGE_SIZE,
+					lq_merged->virtual_address,
+					LOG2_PAGE_SIZE); // translated address
+			}
+
+			
+			if (use_tsp) {
+				if (lq_merged->translated != COMPLETED) {
+					lq_merged->rob_index->num_tsp_ops--;
+				}
+				lq_merged->translated = COMPLETED;
+			}
 			lq_merged->translated = COMPLETED;
 			lq_merged->event_cycle = current_core_cycle[cpu];
 
-			RTL1.push(lq_merged);
+			if (!use_tsp)
+				RTL1.push(lq_merged);
+
+			LSQ_ENTRY empty_entry;
+			if (use_tsp) {
+				if (lq_merged->fetched == COMPLETED)
+					*lq_merged = empty_entry;
+			}
 		}
 
 		// remove this entry
@@ -1653,7 +1706,7 @@ void O3_CPU::handle_memory_return()
 					inflight_mem_executions++;
 
 				LSQ_ENTRY empty_entry;
-				if (use_pcache) {
+				if (use_pcache || use_tsp) {
 					if (merged->translated == COMPLETED)
 						*merged = empty_entry;
 				} else

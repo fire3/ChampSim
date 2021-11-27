@@ -55,7 +55,7 @@ class PageTableWalker : public MemoryRequestConsumer, public MemoryRequestProduc
              operate();
 
         void handle_read(), handle_fill();
-        void increment_WQ_FULL(uint64_t address) {}
+        void increment_WQ_FULL(uint64_t address) {};
 
         uint32_t get_occupancy(uint8_t queue_type, uint64_t address),
                  get_size(uint8_t queue_type, uint64_t address);
@@ -63,4 +63,34 @@ class PageTableWalker : public MemoryRequestConsumer, public MemoryRequestProduc
         uint64_t get_shamt(uint8_t pt_level);
 };
 
+
+class RangeTLB : public MemoryRequestConsumer, public MemoryRequestProducer
+{
+    public:
+        const string NAME;
+        const uint32_t cpu;
+        const uint32_t MAX_READ;
+
+        champsim::delay_queue<PACKET> RQ;
+
+        uint64_t total_miss_latency = 0;
+
+        RangeTLB(string name, uint32_t cpu, uint32_t max_read, uint32_t rq_size, uint32_t latency);
+
+        // functions
+        int add_rq(PACKET *packet);
+        int add_wq(PACKET *packet) { assert(0); }
+        int add_pq(PACKET *packet) { assert(0); }
+        void return_data(PACKET *packet);
+
+        void  operate();
+        void increment_WQ_FULL(uint64_t address) {};
+
+        uint32_t get_occupancy(uint8_t queue_type, uint64_t address),
+                 get_size(uint8_t queue_type, uint64_t address);
+
+
+        void handle_read();
+
+};
 #endif

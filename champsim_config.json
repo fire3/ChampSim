@@ -99,8 +99,8 @@
     },
 
     "ITLB": {
-        "sets": 16,
-        "ways": 4,
+        "sets": 1,
+        "ways": 64,
         "rq_size": 16,
         "wq_size": 16,
         "pq_size": 0,
@@ -112,8 +112,8 @@
     },
 
     "DTLB": {
-        "sets": 16,
-        "ways": 4,
+        "sets": 1,
+        "ways": 64,
         "rq_size": 16,
         "wq_size": 16,
         "pq_size": 0,
@@ -125,7 +125,7 @@
     },
 
     "STLB": {
-        "sets": 128,
+        "sets": 170,
         "ways": 12,
         "rq_size": 32,
         "wq_size": 32,
