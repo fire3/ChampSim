@@ -587,7 +587,7 @@ int main(int argc, char **argv)
 
 	std::cout << std::endl;
 	std::cout << "VirtualMemory physical capacity: "
-		  << std::size(vmem.ppage_free_list) * vmem.page_size;
+		  << std::size(vmem.ppage_free_list) * 4096;
 	std::cout << " num_ppages: " << std::size(vmem.ppage_free_list)
 		  << std::endl;
 	std::cout << "VirtualMemory page size: " << PAGE_SIZE

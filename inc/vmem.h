@@ -15,7 +15,7 @@
 
 #define ALIGN(x, a) __ALIGN_KERNEL((x), (a))
 
-#define PAGE_ALIGN(addr) ALIGN(addr, PAGE_SIZE)
+#define PAGE_ALIGN(addr) ALIGN(addr, 4096ul)
 
 //Virtual Address: 57 bit (9+9+9+9+9+12), rest MSB bits will be used to generate a unique VA per CPU.
 //PTL5->PTL4->PTL3->PTL2->PTL1->PFN

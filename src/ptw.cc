@@ -122,7 +122,7 @@ void PageTableWalker::handle_read()
 				    vmem.get_offset(handle_pkt.full_addr,
 						    vmem.pt_levels - 1) *
 					    PTE_BYTES,
-				    LOG2_PAGE_SIZE);
+				    12);
 
 		if (auto address_pscl5 = PSCL5.check_hit(handle_pkt.full_addr);
 		    address_pscl5.has_value()) {

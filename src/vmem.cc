@@ -14,8 +14,8 @@ extern uint64_t code_size, heap_size, mmap_size, stack_size;
 VirtualMemory::VirtualMemory(uint64_t capacity, uint64_t pg_size,
 			     uint32_t page_table_levels, uint64_t random_seed)
 	: pt_levels(page_table_levels), page_size(pg_size),
-	  ppage_free_list((capacity - VMEM_RESERVE_CAPACITY) / PAGE_SIZE,
-			  PAGE_SIZE)
+	  ppage_free_list(( 4294967296- VMEM_RESERVE_CAPACITY) / 4096,
+			  4096)
 {
 	assert(capacity % PAGE_SIZE == 0);
 	assert(pg_size == (1ul << lg2(pg_size)) && pg_size > 1024);
@@ -51,12 +51,12 @@ uint64_t VirtualMemory::pa_to_ptable_pa(uint64_t paddr)
 
 void VirtualMemory::setup_pcache()
 {
-                ptable_start = 0x2000;
-                ptable_size = pmem_size / PAGE_SIZE;
+                ptable_start = (0x4UL<<30);
+                ptable_size = 137438953472ul / 4096;
 
 		code_virt_start = 0x0;
 		code_virt_end = code_size;
-		code_phys_start = PAGE_ALIGN(ptable_size);
+		code_phys_start = ptable_start + PAGE_ALIGN(ptable_size);
 		code_phys_end = code_phys_start + code_size;
 
 		heap_virt_start = 0x555555554000;
@@ -92,12 +92,12 @@ void VirtualMemory::setup_pcache()
 
 uint64_t VirtualMemory::shamt(uint32_t level) const
 {
-	return LOG2_PAGE_SIZE + lg2(page_size / PTE_BYTES) * (level);
+	return LOG2_PAGE_SIZE + lg2(4096 / PTE_BYTES) * (level);
 }
 
 uint64_t VirtualMemory::get_offset(uint64_t vaddr, uint32_t level) const
 {
-	return (vaddr >> shamt(level)) & bitmask(lg2(page_size / PTE_BYTES));
+	return (vaddr >> shamt(level)) & bitmask(lg2(4096 / PTE_BYTES));
 }
 
 uint64_t VirtualMemory::pcache_va_to_pa(uint32_t cpu_num, uint64_t vaddr)
@@ -142,13 +142,13 @@ uint64_t VirtualMemory::get_pte_pa(uint32_t cpu_num, uint64_t vaddr,
 
 	// this PTE doesn't yet have a mapping
 	if (fault) {
-		next_pte_page += page_size;
-		if (next_pte_page % PAGE_SIZE) {
+		next_pte_page += 4096;
+		if (next_pte_page % 4096) {
 			next_pte_page = ppage_free_list.front();
 			ppage_free_list.pop_front();
 		}
 	}
 
 	return splice_bits(ppage->second, get_offset(vaddr, level) * PTE_BYTES,
-			   lg2(page_size));
+			   lg2(4096));
 }

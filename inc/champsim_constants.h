@@ -12,7 +12,7 @@
 #define LOG2_PAGE_SIZE lg2(PAGE_SIZE)
 #define STAT_PRINTING_PERIOD 10000000u
 #define NUM_CPUS 1u
-#define CPU_FREQ 4000u
+#define CPU_FREQ 3000u
 
 #define IFETCH_BUFFER_SIZE 64u
 #define DECODE_BUFFER_SIZE 32u
@@ -32,7 +32,7 @@
 #define DECODE_LATENCY 1u
 #define DISPATCH_LATENCY 1u
 #define SCHEDULING_LATENCY 0u
-#define EXEC_LATENCY 2u
+#define EXEC_LATENCY 1u
 #define DIB_WINDOW_SIZE 16u
 #define LOG2_DIB_WINDOW_SIZE lg2(DIB_WINDOW_SIZE)
 #define DIB_SET 32u
@@ -64,8 +64,8 @@
 #define L1D_PREF_LOAD 0
 #define L1D_VA_PREF 0
 
-#define L1P_SET 16u
-#define L1P_WAY 8u
+#define L1P_SET 1u
+#define L1P_WAY 64u
 #define L1P_WQ_SIZE 16u
 #define L1P_RQ_SIZE 16u
 #define L1P_PQ_SIZE 4u
