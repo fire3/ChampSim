@@ -3,7 +3,7 @@
     "block_size": 64,
     "page_size": 4096,
     "heartbeat_frequency": 10000000,
-    "cpu_clock_freq": 3000,
+    "cpu_clock_freq": 2500,
     "num_cores": 1,
 
     "ooo_cpu": [
@@ -25,7 +25,7 @@
             "scheduler_size": 128,
             "decode_latency": 1,
             "dispatch_latency": 1,
-            "schedule_latency": 0,
+            "schedule_latency": 1,
             "execute_latency": 1,
             "branch_predictor": "bimodal",
             "btb": "basic_btb"
@@ -60,7 +60,7 @@
         "wq_size": 64,
         "pq_size": 8,
         "mshr_size": 8,
-        "latency": 5,
+        "latency": 2,
         "max_read": 2,
         "max_write": 2,
         "prefetch_as_load": false,

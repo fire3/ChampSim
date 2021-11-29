@@ -1014,8 +1014,8 @@ void O3_CPU::operate_lsq()
 			RTS0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTS0.front()->virtual_address);
 			RTS0.front()->translated = COMPLETED;
-			execute_store(RTS0.front());
-			//RTS1.push(RTS0.front());
+			//execute_store(RTS0.front());
+			RTS1.push(RTS0.front());
 		}  else {
 			rq_index = do_translate_store(RTS0.front());
 			if (rq_index == -2)
@@ -1438,6 +1438,8 @@ void O3_CPU::handle_memory_return()
 							<< LOG2_PAGE_SIZE,
 						it->ip, LOG2_PAGE_SIZE);
 
+					it->instruction_pa = vmem.pcache_va_to_pa(cpu, it->ip);
+
 					available_fetch_bandwidth--;
 				}
 
@@ -1502,9 +1504,9 @@ void O3_CPU::handle_memory_return()
 				dtlb_entry.data << LOG2_PAGE_SIZE,
 				sq_merged->virtual_address,
 				LOG2_PAGE_SIZE); // translated address
-			if (use_tsp)
-				sq_merged->physical_address = 
-				vmem.pcache_va_to_pa(cpu, sq_merged->virtual_address);
+			//if (use_tsp)
+			sq_merged->physical_address = vmem.pcache_va_to_pa(
+				cpu, sq_merged->virtual_address);
 
 			sq_merged->translated = COMPLETED;
 			sq_merged->event_cycle = current_core_cycle[cpu];
@@ -1518,6 +1520,10 @@ void O3_CPU::handle_memory_return()
 					dtlb_entry.data << LOG2_PAGE_SIZE,
 					lq_merged->virtual_address,
 					LOG2_PAGE_SIZE); // translated address
+				lq_merged->physical_address =
+					vmem.pcache_va_to_pa(
+						cpu,
+						lq_merged->virtual_address);
 			}
 
 			
