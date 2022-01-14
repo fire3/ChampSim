@@ -17,7 +17,7 @@ extern uint8_t MAX_INSTR_DESTINATIONS;
 extern VirtualMemory vmem;
 
 extern uint8_t use_pcache;
-extern uint8_t use_tsp;
+extern uint8_t use_smm;
 extern uint8_t use_direct_segment;
 
 void O3_CPU::initialize_core()
@@ -119,7 +119,7 @@ uint32_t O3_CPU::init_instruction(ooo_model_instr arch_instr)
 			arch_instr.num_reg_ops++;
 		if (arch_instr.source_memory[i]) {
 			arch_instr.num_mem_ops++;
-			if (use_tsp)
+			if (use_smm)
 				arch_instr.num_tsp_ops++;
 			if (use_pcache)
 				arch_instr.num_pcache_ops++;
@@ -597,7 +597,7 @@ int O3_CPU::prefetch_code_line(uint64_t pf_v_addr)
 	if (!L1I.PQ.full()) {
 		// magically translate prefetches
 		uint64_t pf_pa;
-		if (use_pcache || use_rmm || use_direct_segment || use_tsp)
+		if (use_pcache || use_rmm || use_direct_segment || use_smm)
 			pf_pa = splice_bits(vmem.pcache_va_to_pa(cpu,
 								 pf_v_addr),
 					    pf_v_addr, LOG2_PAGE_SIZE);
@@ -862,7 +862,7 @@ void O3_CPU::do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry)
 
 	if (use_pcache)
 		lq_entry.rob_index->num_pcache_ops--;
-	if (use_tsp)
+	if (use_smm)
 		lq_entry.rob_index->num_tsp_ops--;
 
 	lq_entry.rob_index->event_cycle = current_core_cycle[cpu];
@@ -1058,7 +1058,7 @@ void O3_CPU::operate_lsq()
 			//rq_index = execute_load(RTL0.front());
 			//if (rq_index == -2)
 			//	break;
-		} else if (use_tsp) {
+		} else if (use_smm) {
 			RTL0.front()->physical_address = vmem.pcache_va_to_pa(
 				cpu, RTL0.front()->virtual_address);
 //			printf("%#lx -> %#lx\n",RTL0.front()->virtual_address, RTL0.front()->physical_address); 
@@ -1254,7 +1254,7 @@ int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 			  << " is popped to RTL0" << std::endl;
 	})
 
-	if (use_tsp) {
+	if (use_smm) {
 		if (lq_it->translated == 0) {
 			rq_index  = DTLB_bus.lower_level->add_rq(&data_packet);
 			if (rq_index != -2)
@@ -1296,7 +1296,7 @@ int O3_CPU::execute_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 	data_packet.to_return = { &L1D_bus };
 	data_packet.lq_index_depend_on_me = { lq_it };
 
-	if (use_tsp || use_pcache) {
+	if (use_smm || use_pcache) {
 		if (lq_it->fetched == 0) {
 			rq_index = L1D_bus.lower_level->add_rq(&data_packet);
 
@@ -1376,7 +1376,7 @@ void O3_CPU::complete_inflight_instruction()
 				if (use_pcache) {
 					if (rob_it->num_pcache_ops == 0)
 						do_complete_execution(rob_it);
-				} else if (use_tsp) {
+				} else if (use_smm) {
 					if (rob_it->num_tsp_ops == 0)
 						do_complete_execution(rob_it);
 				} else
@@ -1504,7 +1504,7 @@ void O3_CPU::handle_memory_return()
 				dtlb_entry.data << LOG2_PAGE_SIZE,
 				sq_merged->virtual_address,
 				LOG2_PAGE_SIZE); // translated address
-			//if (use_tsp)
+			//if (use_smm)
 			sq_merged->physical_address = vmem.pcache_va_to_pa(
 				cpu, sq_merged->virtual_address);
 
@@ -1515,7 +1515,7 @@ void O3_CPU::handle_memory_return()
 		}
 
 		for (auto lq_merged : dtlb_entry.lq_index_depend_on_me) {
-			if (!use_tsp) {
+			if (!use_smm) {
 				lq_merged->physical_address = splice_bits(
 					dtlb_entry.data << LOG2_PAGE_SIZE,
 					lq_merged->virtual_address,
@@ -1527,7 +1527,7 @@ void O3_CPU::handle_memory_return()
 			}
 
 			
-			if (use_tsp) {
+			if (use_smm) {
 				if (lq_merged->translated != COMPLETED) {
 					lq_merged->rob_index->num_tsp_ops--;
 				}
@@ -1536,7 +1536,7 @@ void O3_CPU::handle_memory_return()
 			lq_merged->translated = COMPLETED;
 			lq_merged->event_cycle = current_core_cycle[cpu];
 
-			if (!use_tsp)
+			if (!use_smm)
 				RTL1.push(lq_merged);
 #if 0
 			if (warmup_complete[cpu])
@@ -1546,7 +1546,7 @@ void O3_CPU::handle_memory_return()
 #endif
 
 			LSQ_ENTRY empty_entry;
-			if (use_tsp) {
+			if (use_smm) {
 				if (lq_merged->fetched == COMPLETED) {
 					#if 0
 					if (warmup_complete[cpu])
@@ -1570,7 +1570,7 @@ void O3_CPU::handle_memory_return()
 
 		for (auto merged : l1d_entry.lq_index_depend_on_me) {
 			merged->event_cycle = current_core_cycle[cpu];
-			if (use_pcache || use_tsp) {
+			if (use_pcache || use_smm) {
 				if (merged->fetched == INFLIGHT) {
 					merged->rob_index->num_mem_ops--;
 				}
@@ -1588,7 +1588,7 @@ void O3_CPU::handle_memory_return()
 				       current_core_cycle[cpu], merged->rob_index->instr_id);
 #endif
 			LSQ_ENTRY empty_entry;
-			if (use_pcache || use_tsp) {
+			if (use_pcache || use_smm) {
 				if (merged->translated == COMPLETED) {
 					*merged = empty_entry;
 				}

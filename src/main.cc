@@ -26,7 +26,7 @@ uint64_t warmup_instructions = 1000000, simulation_instructions = 10000000,
 	 champsim_seed;
 
 uint8_t use_pcache = 0;
-uint8_t use_tsp = 0;
+uint8_t use_smm = 0;
 uint8_t use_direct_segment = 0;
 uint8_t use_dcache_ptable = 0;
 uint8_t use_rmm = 0;
@@ -463,7 +463,7 @@ int main(int argc, char **argv)
 			{ "traces", no_argument, 0, 't' },
 			{ "direct_segment", no_argument, 0, 1 },
 			{ "rmm", no_argument, 0, 2 },
-			{ "tsp", no_argument, 0, 3 },
+			{ "smm", no_argument, 0, 3 },
 			{ 0, 0, 0, 0 }
 		};
 
@@ -487,7 +487,7 @@ int main(int argc, char **argv)
 			use_rmm = 1;
 			break;
 		case 3:
-			use_tsp = 1;
+			use_smm = 1;
 			break;
 		case 'w':
 			warmup_instructions = atol(optarg);
@@ -542,7 +542,7 @@ int main(int argc, char **argv)
 	cout << "LLC sets: " << LLC_SET << endl;
 	cout << "LLC ways: " << LLC_WAY << endl;
 
-//	if (use_tsp || use_rmm || use_pcache || use_direct_segment || use_dcache_ptable) {
+//	if (use_smm || use_rmm || use_pcache || use_direct_segment || use_dcache_ptable) {
 	if (code_size == 0 || heap_size == 0 || mmap_size == 0 ||
 	    stack_size == 0) {
 		printf("Please indicate the correct code/heap/mmap/stack size.\n");
@@ -554,7 +554,7 @@ int main(int argc, char **argv)
 	printf("Stack size: %#lx\n", stack_size);
 	vmem.setup_pcache();
 	//	}
-	if (use_tsp)
+	if (use_smm)
 		printf("Tsp enabled.\n");
 
 	if (use_rmm)
